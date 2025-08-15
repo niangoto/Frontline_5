@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <title>BuSe Frontline Editor</title>
+    <style>
+        body { background: #eee; font-family: sans-serif; }
+        #editor-canvas { border: 1px solid #333; background: #fff; display: block; margin: 20px auto; }
+        #controls { text-align: center; margin: 10px; }
+        #output { width: 90%; height: 120px; margin: 10px auto; display: block; }
+        .btn { padding: 6px 16px; margin: 0 5px; }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;">BuSe Карта – Редактор на фронтовата линия и столици</h2>
+    <div id="controls">
+        <button class="btn" onclick="addPoint()">Добави точка</button>
+        <button class="btn" onclick="removePoint()">Премахни точка</button>
+        <button class="btn" onclick="setCapital(0)">Задай столица (червен)</button>
+        <button class="btn" onclick="setCapital(1)">Задай столица (син)</button>
+        <button class="btn" onclick="toggleSeaEdit()" id="sea-btn">Редактирай море</button>
+        <button class="btn" onclick="closeSeaPolygon()" id="close-sea-btn" style="display:none;">Затвори море</button>
+        <button class="btn" onclick="removeSeaPoint()" id="remove-sea-btn" style="display:none;">Изтрий точка</button>
+        <button class="btn" onclick="exportData()">Експортирай данни</button>
+    </div>
+    <canvas id="editor-canvas" width="700" height="600"></canvas>
+    <textarea id="output" readonly placeholder="Тук ще се появи JS кодът за копиране..."></textarea>
+    <script>
+        const canvas = document.getElementById('editor-canvas');
+        const ctx = canvas.getContext('2d');
+        const BuSe_IMG_SRC = 'map1.png'; // Път към изображението на BuSe картата
+
+        // Начални данни
+        let frontLine = [
+            [350, 0], [350, 100], [350, 200], [350, 300], [350, 400], [350, 500], [350, 600]
+        ];
+        let capitals = [null, null]; // [ [x, y], [x, y] ]
+        let draggingIdx = null;
+        let dragOffset = [0, 0];
+        let draggingCapital = null;
+        let hoverIdx = null;
+        let hoverCapital = null;
+        let seaPolygons = []; // масив от полигони (всеки е масив от точки)
+        let editingSea = false;
+        let currentSea = []; // текущо редактиран полигон
+
+        // Зареждане на изображението
+        const bgImg = new Image();
+        bgImg.src = BuSe_IMG_SRC;
+        bgImg.onload = draw;
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1.0;
+            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+
+            // Морски полигони
+            ctx.save();
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = "#0099ff";
+            for (const poly of seaPolygons) {
+                if (poly.length > 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(poly[0][0], poly[0][1]);
+                    for (let i = 1; i < poly.length; i++) {
+                        ctx.lineTo(poly[i][0], poly[i][1]);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+            // Текущо редактиран полигон
+            if (editingSea && currentSea.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(currentSea[0][0], currentSea[0][1]);
+                for (let i = 1; i < currentSea.length; i++) {
+                    ctx.lineTo(currentSea[i][0], currentSea[i][1]);
+                }
+                ctx.strokeStyle = "#0099ff";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                // Точки
+                for (let i = 0; i < currentSea.length; i++) {
+                    ctx.beginPath();
+                    ctx.arc(currentSea[i][0], currentSea[i][1], 6, 0, Math.PI * 2);
+                    ctx.fillStyle = "#0099ff";
+                    ctx.fill();
+                }
+            }
+            ctx.restore();
+
+            // Фронтова линия
+            ctx.beginPath();
+            ctx.moveTo(frontLine[0][0], frontLine[0][1]);
+            for (let i = 1; i < frontLine.length; i++) {
+                ctx.lineTo(frontLine[i][0], frontLine[i][1]);
+            }
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Точки на фронта
+            for (let i = 0; i < frontLine.length; i++) {
+                ctx.beginPath();
+                ctx.arc(frontLine[i][0], frontLine[i][1], 8, 0, Math.PI * 2);
+                ctx.fillStyle = (i === hoverIdx) ? "#0f0" : "#fff";
+                ctx.fill();
+                ctx.strokeStyle = "#000";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+
+            // Столици
+            for (let p = 0; p < 2; p++) {
+                if (capitals[p]) {
+                    ctx.beginPath();
+                    ctx.arc(capitals[p][0], capitals[p][1], 15, 0, Math.PI * 2);
+                    ctx.fillStyle = p === 0 ? "#FFD700" : "#FFD700";
+                    ctx.strokeStyle = p === 0 ? "#FF0000" : "#0000FF";
+                    ctx.lineWidth = 4;
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
+            }
+        }
+
+        // Drag & drop точки на фронта
+        canvas.addEventListener('mousedown', function(e) {
+            const [mx, my] = getMouse(e);
+            if (editingSea) {
+                currentSea.push([mx, my]);
+                draw();
+                return;
+            }
+            // Проверка за столица
+            for (let p = 0; p < 2; p++) {
+                if (capitals[p] && dist([mx, my], capitals[p]) < 18) {
+                    draggingCapital = p;
+                    dragOffset = [capitals[p][0] - mx, capitals[p][1] - my];
+                    return;
+                }
+            }
+            // Проверка за точка
+            for (let i = 0; i < frontLine.length; i++) {
+                if (dist([mx, my], frontLine[i]) < 12) {
+                    draggingIdx = i;
+                    dragOffset = [frontLine[i][0] - mx, frontLine[i][1] - my];
+                    return;
+                }
+            }
+        });
+        canvas.addEventListener('mousemove', function(e) {
+            const [mx, my] = getMouse(e);
+            hoverIdx = null;
+            hoverCapital = null;
+            // Hover за столици
+            for (let p = 0; p < 2; p++) {
+                if (capitals[p] && dist([mx, my], capitals[p]) < 18) {
+                    hoverCapital = p;
+                }
+            }
+            // Hover за точки
+            for (let i = 0; i < frontLine.length; i++) {
+                if (dist([mx, my], frontLine[i]) < 12) {
+                    hoverIdx = i;
+                }
+            }
+            if (draggingIdx !== null) {
+                frontLine[draggingIdx][0] = mx + dragOffset[0];
+                frontLine[draggingIdx][1] = my + dragOffset[1];
+                draw();
+            } else if (draggingCapital !== null) {
+                capitals[draggingCapital][0] = mx + dragOffset[0];
+                capitals[draggingCapital][1] = my + dragOffset[1];
+                draw();
+            } else {
+                draw();
+            }
+        });
+        canvas.addEventListener('mouseup', function(e) {
+            draggingIdx = null;
+            draggingCapital = null;
+        });
+
+        function getMouse(e) {
+            const rect = canvas.getBoundingClientRect();
+            return [e.clientX - rect.left, e.clientY - rect.top];
+        }
+        function dist(a, b) {
+            return Math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2);
+        }
+
+        // Контроли
+        function addPoint() {
+            // Добавя по средата между последните две точки
+            if (frontLine.length < 2) return;
+            const last = frontLine[frontLine.length-1];
+            const prev = frontLine[frontLine.length-2];
+            const mid = [(last[0]+prev[0])/2, (last[1]+prev[1])/2];
+            frontLine.splice(frontLine.length-1, 0, mid);
+            draw();
+        }
+        function removePoint() {
+            if (frontLine.length > 2) {
+                frontLine.splice(frontLine.length-2, 1);
+                draw();
+            }
+        }
+        function setCapital(player) {
+            // Следващият клик на картата ще постави столицата
+            canvas.style.cursor = "crosshair";
+            function handler(e) {
+                const [mx, my] = getMouse(e);
+                capitals[player] = [mx, my];
+                canvas.removeEventListener('mousedown', handler);
+                canvas.style.cursor = "";
+                draw();
+            }
+            canvas.addEventListener('mousedown', handler);
+        }
+        // Морски редактор
+        function toggleSeaEdit() {
+            editingSea = !editingSea;
+            document.getElementById('sea-btn').textContent = editingSea ? "Излез от море" : "Редактирай море";
+            document.getElementById('close-sea-btn').style.display = editingSea ? "" : "none";
+            document.getElementById('remove-sea-btn').style.display = editingSea ? "" : "none";
+            if (!editingSea && currentSea.length > 2) {
+                // Ако излизаме от режим и има незатворен полигон, затваряме го
+                seaPolygons.push([...currentSea]);
+                currentSea = [];
+            }
+            draw();
+        }
+        function closeSeaPolygon() {
+            if (currentSea.length > 2) {
+                seaPolygons.push([...currentSea]);
+                currentSea = [];
+                draw();
+            }
+        }
+        function removeSeaPoint() {
+            if (currentSea.length > 0) {
+                currentSea.pop();
+                draw();
+            }
+        }
+        function exportData() {
+            const frontArr = JSON.stringify(frontLine.map(([x, y]) => [Math.round(x), Math.round(y)]));
+            const capitalsArr = JSON.stringify(capitals.map(c => c ? [Math.round(c[0]), Math.round(c[1])] : null));
+            const seaArr = JSON.stringify(seaPolygons.map(poly => poly.map(([x, y]) => [Math.round(x), Math.round(y)])));
+            document.getElementById('output').value =
+`// BuSe карта: фронтова линия, столици и море
+const BuSe_FRONTLINE = ${frontArr};
+const BuSe_CAPITALS = ${capitalsArr};
+const BuSe_SEA = ${seaArr};`;
+        }
+
+        window.addPoint = addPoint;
+        window.removePoint = removePoint;
+        window.setCapital = setCapital;
+        window.exportData = exportData;
+        window.toggleSeaEdit = toggleSeaEdit;
+        window.closeSeaPolygon = closeSeaPolygon;
+        window.removeSeaPoint = removeSeaPoint;
+    </script>
+</body>
+</html>

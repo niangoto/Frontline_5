@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <title>Редактор на фронтова линия</title>
+    <style>
+        body { background: #f0f0f0; font-family: Arial; }
+        #container { margin: 20px auto; width: 1000px; }
+        #frontline-canvas { background: #fff; border: 1px solid #333; display: block; }
+        #controls { margin-top: 10px; }
+        #output { width: 100%; height: 120px; margin-top: 10px; font-family: monospace; }
+        .btn { padding: 6px 12px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+<div id="container">
+    <h2>Редактор на фронтова линия</h2>
+    <canvas id="frontline-canvas" width="1000" height="600"></canvas>
+    <div id="controls">
+        <button class="btn" id="add-point">Добави точка</button>
+        <button class="btn" id="remove-point">Премахни точка</button>
+        <button class="btn" id="print-code">Принтирай JS код</button>
+        <span>Избери точка с ляв клик, мести с влачене.</span>
+    </div>
+    <textarea id="output" readonly></textarea>
+</div>
+<script>
+const canvas = document.getElementById('frontline-canvas');
+const ctx = canvas.getContext('2d');
+const output = document.getElementById('output');
+let frontline = [
+    [500, 50],
+    [500, 100],
+    [500, 150],
+    [500, 200],
+    [500, 250],
+    [500, 300],
+    [500, 350],
+    [500, 400],
+    [500, 450],
+    [500, 500],
+    [500, 550]
+];
+
+let selectedIdx = null;
+let dragging = false;
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(frontline[0][0], frontline[0][1]);
+    for (let i = 1; i < frontline.length; i++) {
+        ctx.lineTo(frontline[i][0], frontline[i][1]);
+    }
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Draw points
+    for (let i = 0; i < frontline.length; i++) {
+        ctx.beginPath();
+        ctx.arc(frontline[i][0], frontline[i][1], 10, 0, 2 * Math.PI);
+        ctx.fillStyle = (i === selectedIdx) ? "#4caf50" : "#1976d2";
+        ctx.fill();
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 14px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(i, frontline[i][0], frontline[i][1]);
+    }
+}
+
+canvas.addEventListener('mousedown', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    selectedIdx = null;
+    for (let i = 0; i < frontline.length; i++) {
+        const [x, y] = frontline[i];
+        if (Math.hypot(mx - x, my - y) < 14) {
+            selectedIdx = i;
+            dragging = true;
+            break;
+        }
+    }
+    draw();
+});
+
+canvas.addEventListener('mousemove', function(e) {
+    if (dragging && selectedIdx !== null) {
+        const rect = canvas.getBoundingClientRect();
+        frontline[selectedIdx][0] = Math.max(0, Math.min(canvas.width, e.clientX - rect.left));
+        frontline[selectedIdx][1] = Math.max(0, Math.min(canvas.height, e.clientY - rect.top));
+        draw();
+    }
+});
+
+canvas.addEventListener('mouseup', function(e) {
+    dragging = false;
+});
+
+document.getElementById('add-point').onclick = function() {
+    if (selectedIdx !== null) {
+        // Вмъкни нова точка след избраната
+        const [x, y] = frontline[selectedIdx];
+        frontline.splice(selectedIdx + 1, 0, [x + 20, y + 20]);
+        selectedIdx++;
+    } else {
+        // Добави в края
+        frontline.push([canvas.width / 2, canvas.height / 2]);
+        selectedIdx = frontline.length - 1;
+    }
+    draw();
+};
+
+document.getElementById('remove-point').onclick = function() {
+    if (selectedIdx !== null && frontline.length > 2) {
+        frontline.splice(selectedIdx, 1);
+        selectedIdx = null;
+        draw();
+    }
+};
+
+document.getElementById('print-code').onclick = function() {
+    let code = "// Начално положение на фронтовата линия\nconst INITIAL_FRONTLINE = [\n";
+    for (const [x, y] of frontline) {
+        code += `    [${Math.round(x)}, ${Math.round(y)}],\n`;
+    }
+    code += "];";
+    output.value = code;
+};
+
+draw();
+</script>
+</body>
+</html>

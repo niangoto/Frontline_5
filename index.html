@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Front Line Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 1000px;
+            height: 600px;
+            margin-top: 20px;
+            border: 2px solid #333;
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            background-color: #f0f0f0;
+        }
+        
+        #settings-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px;
+            height: 400px;  /* Increased height for new input */
+            background-color: #f0f0f0;
+            border: 2px solid #333;
+            border-radius: 5px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        
+        .settings-row {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .settings-row input {
+            width: 100px;
+            padding: 10px;
+            font-size: 18px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        
+        #settings-modal h2 {
+            margin-bottom: 30px;
+        }
+        
+        #turn-input {
+            width: 100px;
+            padding: 10px;
+            font-size: 18px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        #confirm-btn {
+            padding: 10px 20px;
+            background-color: #64c864;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        
+        #confirm-btn:hover {
+            background-color: #4ca64c;
+        }
+        
+        #game-info {
+            color: #000;
+            font-size: 16px;
+            padding-left: 10px;
+        }
+        
+        #ready-btn {
+            padding: 10px 20px;
+            background-color: #64c864;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        #ready-btn:hover {
+            background-color: #4ca64c;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+
+        .game-header {
+            width: 1000px;
+            height: 40px;
+            position: relative;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Mobile styles */
+        @media (max-width: 768px) {
+            #game-container {
+                width: 100%;
+                height: auto;
+                padding-bottom: 100%; /* 16:9 Aspect Ratio */
+            }
+            
+            #game-canvas {
+                width: 100%;
+                height: 100%;
+            }
+            
+            #settings-modal {
+                width: 90%;
+                height: auto;
+                padding: 10px;
+            }
+            
+            .settings-row input {
+                width: 80px;
+                padding: 8px;
+                font-size: 16px;
+            }
+            
+            #turn-input {
+                width: 80px;
+                padding: 8px;
+                font-size: 16px;
+            }
+            
+            #confirm-btn {
+                padding: 8px 16px;
+                font-size: 16px;
+            }
+            
+            #game-info {
+                font-size: 14px;
+            }
+            
+            #ready-btn {
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Front Line Game</h1>
+    <div class="game-header">
+        <div id="game-info"></div>
+        <button id="ready-btn" class="hidden">ГОТОВО</button>
+    </div>
+    <div id="game-container">
+        <canvas id="game-canvas" width="1000" height="600" style="background: url('germany-poland-border.png') center/cover no-repeat;"></canvas>
+        <img id="bg-map" src="img/germany-poland-border.png" style="display:none">
+        <div id="settings-modal">
+            <h2>Настройки на играта</h2>
+            <div class="settings-row">
+                <p>Въведете брой единици за всеки играч (1-50):</p>
+                <input type="number" id="units-input" min="1" max="50" value="10">
+            </div>
+            <div class="settings-row">
+                <p>Въведете брой ходове за битка (1-15):</p>
+                <input type="number" id="turn-input" min="1" max="15" value="3">
+            </div>
+            <div class="settings-row">
+                <p>Избери карта:</p>
+                <select id="map-select">
+                    <option value="classic">Класическа (права линия)</option>
+                    <option value="custom">Изкривена (от frontline_shape.js)</option>
+                    <option value="BuSe">BuSe (историческа карта)</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label for="mode-select">Режим:</label>
+                <select id="mode-select">
+                    <option value="2players">Двама играчи</option>
+                    <option value="vsbot">Срещу бот</option>
+                </select>
+            </div>
+            <button id="confirm-btn">Потвърди</button>
+        </div>
+    </div>
+    <script src="frontline_shape.js"></script>
+    <script src="BuSe_frontline.js"></script>
+    <script>
+    // --- Зареждане на морските зони за BuSe карта ---
+    // Ако има дефиниран BuSe_SEA, го правим глобален като BuSe_SEA_ZONES
+    if (typeof BuSe_SEA !== "undefined") {
+        window.BuSe_SEA_ZONES = BuSe_SEA;
+    }
+    </script>
+    <script src="game.js"></script>
+    <script src="bot_controller.js"></script>
+    <script src="game2.js"></script>
+    <script>
+    // Скрий точките на фронтовата линия (малките кръгчета)
+    if (typeof drawGame === "function") {
+        const origDrawGame = drawGame;
+        window.drawGame = function() {
+            origDrawGame();
+            // Точките са премахнати от оригиналния drawGame.
+        };
+    }
+    </script>
+</body>
+</html>
